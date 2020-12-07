@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1070606536856",
+    "project_id": "loginuitutorial",
+    "storage_bucket": "loginuitutorial.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1070606536856:android:a496114639c676e02400ed",
+        "android_client_info": {
+          "package_name": "tech.gamedev.loginuitutorial"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1070606536856-d506ljfu23bkq8mdg5utmrrr7asj2rd8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCfMIulzsxPHpYh4syIr5Gm66zrtht38gY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1070606536856-d506ljfu23bkq8mdg5utmrrr7asj2rd8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,6 +1,7 @@
 package tech.gamedev.loginuitutorial
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -11,49 +12,35 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import tech.gamedev.loginuitutorial.data.Constants.AUTH_REQUEST_CODE
+import tech.gamedev.loginuitutorial.data.Constants.WEB_CLIENT_ID
 import tech.gamedev.loginuitutorial.data.SharedPreference
 
 
 class LoginActivity : AppCompatActivity() {
 
-    lateinit var mainAccount: GoogleSignInAccount
-
-
-
+    lateinit var auth : FirebaseAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        auth = FirebaseAuth.getInstance()
 
-        //SET GOOGLE SIGN IN OPTIONS
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .build()
-
-        val mGoogleSignInClient = GoogleSignIn.getClient(this, gso)
+        //SIGN OUT USER BECAUSE FIREBASE AUTOMATICLY SAVES LAST LOGGED IN USER
+        signOut()
 
 
-
-
-
-
-        //SET SHARED PREFERENCE OBJECT
-        val sharedPreference = SharedPreference(this)
-        //CHECK FOR SAVED USERS
-        if(sharedPreference.getValueString("USER_NAME") != null && sharedPreference.getValueString("PASS_WORD") != null){
-            etUserName.setText(sharedPreference.getValueString("USER_NAME"))
-            etPassWord.setText(sharedPreference.getValueString("PASS_WORD"))
-            cbRememberMe.isChecked = true
-        }
-        //END SET SHARED PREFERENCE OBJECT
-
-
-        //REGULAR LOGIN START*****
-
+        //LOGIN WITH EMAIL AND PASSWORD
         btnLogin.setOnClickListener {
-
+            loginUserWithEmailAndPassWord()
             btnLogin.animate().apply {
                 duration = 200
                 scaleYBy(0.1f)
@@ -65,101 +52,107 @@ class LoginActivity : AppCompatActivity() {
                     scaleXBy(-0.1f)
                 }
             }.start()
-
-            if(cbRememberMe.isChecked){
-                if(etIsNotEmpty()){
-                    val userName = etUserName.text.toString()
-                    val passWord = etPassWord.text.toString()
-                    sharedPreference.saveUsername("USER_NAME", userName)
-                    sharedPreference.savePassword("PASS_WORD", passWord)
-                    sharedPreference.saveRememberMe("IS_CHECKED", true)
-                }else{
-                    Toast.makeText(
-                        this,
-                        "Please fill in a username and password..",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }else if(!cbRememberMe.isChecked &&
-                    sharedPreference.getValueString("USER_NAME") != null &&
-                    sharedPreference.getValueString("PASS_WORD") != null)
-            {
-                sharedPreference.deleteUserNameAndPassWord()
-                sharedPreference.saveRememberMe("IS_CHECKED", false)
-            }
         }
-        //REGULAR LOGIN END*****
 
+        //REGISTER WITH EMAIL AND PASSWORD
+        btnRegister.setOnClickListener {
+            registerUser()
+        }
 
-        //SOCIAL LOGIN BUTTONS START*****
+        //LOGIN WITH GOOGLE
         btnGoogleLogin.setOnClickListener {
-            animateBtn(it)
-            val signInIntent = mGoogleSignInClient.signInIntent
-            startActivityForResult(signInIntent, AUTH_REQUEST_CODE)
+            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                    .requestIdToken(getString(R.string.default_web_client_id))
+                    .requestEmail()
+                    .build()
 
+            val signInClient = GoogleSignIn.getClient(this, gso)
+            signInClient.signInIntent.also {  signInIntent ->
+                startActivityForResult(signInIntent, AUTH_REQUEST_CODE)
+            }
+            animateBtn(it)
         }
 
-        btnFacebookLogin.setOnClickListener {
-            animateBtn(it)
-            signOut(mGoogleSignInClient)
-        }
-
-        btnTwitterLogin.setOnClickListener {
-            animateBtn(it)
-
-        }
-        //SOCIAL LOGIN BUTTONS END*****
 
 
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        Log.d("LOGIN", "entered onActivityResult")
-
-        if (resultCode == AUTH_REQUEST_CODE){
-
-            Log.d("LOGIN", "login started")
-
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            try {
-                val account = task.getResult(ApiException::class.java)
-                mainAccount = account!!
-
-                handleSignInResult(account)
-
-                Log.d("LOGIN", "firebaseAuthWithGoogle:")
-            }catch (e: ApiException){
-                Log.w("LOGIN", "Google sign in failed", e)
+    //REGISTER WITH EMAIL AND PASSWORD
+    private fun registerUser() {
+        //GET EMAIL AND PASSWORD IN STRING VALUES
+        val email = etUserName.text.toString()
+        val password = etPassWord.text.toString()
+        //CHECK IF STRINGS ARE NOT EMPTY
+        if(email.isNotEmpty() && password.isNotEmpty()) {
+            //ENTER A BACKGROUND THREAD
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    //CREATE NEW USER WITH EMAIL AND PASSWORD AND WAIT TILL FINISHED WITH .awat()
+                    auth.createUserWithEmailAndPassword(email, password).await()
+                    withContext(Dispatchers.Main) {
+                        //UPDATE UI TO DISPLAY USER
+                        checkedLoggedInState()
+                    }
+                } catch (e: Exception) {
+                    //DISPLAY ERROR IN UI
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@LoginActivity, e.message, Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }
 
-    private fun handleSignInResult(account: GoogleSignInAccount?){
+    //LOGIN WITH EMAIL AND PASSWORD
+    private fun loginUserWithEmailAndPassWord() {
+        val email = etUserName.text.toString()
+        val password = etPassWord.text.toString()
+        if(email.isNotEmpty() && password.isNotEmpty()) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    auth.signInWithEmailAndPassword(email, password).await()
+                    withContext(Dispatchers.Main) {
+                        checkedLoggedInState()
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@LoginActivity, e.message, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun checkedLoggedInState() {
+        if(auth.currentUser == null) {
+            tvLoggedIn.text = "NOT LOGGED IN"
+            tvLoggedIn.setBackgroundColor(Color.RED)
+        } else {
+            tvLoggedIn.text = "Welcome ${auth.currentUser!!.email}"
+            tvLoggedIn.setBackgroundColor(Color.GREEN)
+        }
+    }
+
+
+
+
+
+
+
+    //SIGN OUT USER
+    private fun signOut() {
         try {
-            Toast.makeText(this, "username: ${account!!.email}", Toast.LENGTH_SHORT).show()
-        }catch (e: Exception){
-            Log.w("LOGIN", "signInResult:failed code=$e");
+            CoroutineScope(Dispatchers.IO).launch {
+                auth.signOut()
+                checkedLoggedInState()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun signOut(mGoogleSignInClient: GoogleSignInClient) {
 
-
-        mGoogleSignInClient.revokeAccess()
-            .addOnCompleteListener(this) {
-                Toast.makeText(this, "Sign out successful", Toast.LENGTH_SHORT).show()
-            }
-    }
-
-
-
-    private fun etIsNotEmpty(): Boolean{
-
-        return etUserName.text.isNotEmpty() && etPassWord.text.isNotEmpty()
-    }
-
+    //ANIMATE BUTTONS
     private fun animateBtn(btn: View){
 
         when(btn){
@@ -187,9 +180,76 @@ class LoginActivity : AppCompatActivity() {
 
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if(requestCode == AUTH_REQUEST_CODE) {
+            try {
+                val account = GoogleSignIn.getSignedInAccountFromIntent(data).result
+                account?.let {
+                    googleAuthForFirebase(it)
+                }
+            } catch (e: Exception) {
+                Log.d("GOOGLE", e.message.toString())
+                Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show()
+            }
 
 
+        }
+    }
+
+    private fun googleAuthForFirebase(account: GoogleSignInAccount) {
+        val credentials = GoogleAuthProvider.getCredential(account.idToken, null)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                auth.signInWithCredential(credentials).await()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@LoginActivity, "Logged in successfully", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@LoginActivity, e.message, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /*private fun setupSharedPreferences() {
+        //SET SHARED PREFERENCE OBJECT
+        val sharedPreference = SharedPreference(this)
+        //CHECK FOR SAVED USERS
+        if(sharedPreference.getValueString("USER_NAME") != null && sharedPreference.getValueString("PASS_WORD") != null){
+            etUserName.setText(sharedPreference.getValueString("USER_NAME"))
+            etPassWord.setText(sharedPreference.getValueString("PASS_WORD"))
+            cbRememberMe.isChecked = true
+        }
+        //END SET SHARED PREFERENCE OBJECT
+
+        if(cbRememberMe.isChecked){
+            if(etIsNotEmpty()){
+                val userName = etUserName.text.toString()
+                val passWord = etPassWord.text.toString()
+                sharedPreference.saveUsername("USER_NAME", userName)
+                sharedPreference.savePassword("PASS_WORD", passWord)
+                sharedPreference.saveRememberMe("IS_CHECKED", true)
+            }else{
+                Toast.makeText(
+                        this,
+                        "Please fill in a username and password..",
+                        Toast.LENGTH_SHORT
+                ).show()
+            }
+        }else if(!cbRememberMe.isChecked &&
+                sharedPreference.getValueString("USER_NAME") != null &&
+                sharedPreference.getValueString("PASS_WORD") != null)
+        {
+            sharedPreference.deleteUserNameAndPassWord()
+            sharedPreference.saveRememberMe("IS_CHECKED", false)
+        }
+
+    }*/
+
+    override fun onStart() {
+        super.onStart()
+        checkedLoggedInState()
     }
 }
